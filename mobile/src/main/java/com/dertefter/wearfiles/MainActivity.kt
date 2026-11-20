@@ -36,6 +36,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.Button
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -155,6 +157,15 @@ fun MainScreen(
         }
     }
 
+    val autoEnabled = remember { mutableStateOf(AutoTransfer.prefs(context).getBoolean("enabled", false)) }
+    val autoPermission = if (Build.VERSION.SDK_INT >= 33) android.Manifest.permission.READ_MEDIA_IMAGES else android.Manifest.permission.READ_EXTERNAL_STORAGE
+    val autoPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted && selectedNodeId != null) {
+            AutoTransfer.enable(context, selectedNodeId)
+            autoEnabled.value = true
+        }
+    }
+
     Scaffold(
         modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = MaterialTheme.colorScheme.background,
@@ -180,6 +191,21 @@ fun MainScreen(
                     }
                 )
 
+                Button(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    enabled = autoEnabled.value || availableNodes.any { it.id == selectedNodeId && it.status == ConnectionStatus.READY },
+                    onClick = {
+                        if (autoEnabled.value) {
+                            AutoTransfer.disable(context)
+                            autoEnabled.value = false
+                        } else if (selectedNodeId != null) {
+                            if (androidx.core.content.ContextCompat.checkSelfPermission(context, autoPermission) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                AutoTransfer.enable(context, selectedNodeId)
+                                autoEnabled.value = true
+                            } else autoPermissionLauncher.launch(autoPermission)
+                        }
+                    }
+                ) { Text(if (autoEnabled.value) "Wyłącz auto ChatGPT" else "Włącz auto ChatGPT") }
                 NodeSelectionPager(
                     modifier = Modifier
                         .padding(bottom = 8.dp),
