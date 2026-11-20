@@ -7,6 +7,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <queries><package android:name="com.openai.chatgpt" /></queries>
     <application
         android:allowBackup="true"
         android:enableOnBackInvokedCallback="true"
@@ -44,6 +48,7 @@
             </intent-filter>
         </activity>
 
+        <service android:name=".AutoTransferJob" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="true" />
         <service
             android:name=".FileTransferService"
             android:enabled="true"
