@@ -21,7 +21,7 @@ android {
     compileSdk { version = release(37) { minorApiLevel = 1 } }
 
     defaultConfig {
-        applicationId = "com.dertefter.wearfiles"
+        applicationId = "com.dertefter.wearfiles.auto"
         minSdk = 26
         targetSdk = 37
         versionCode = project.property("appVersionCode").toString().toInt() + 1
