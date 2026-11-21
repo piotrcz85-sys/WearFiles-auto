@@ -21,6 +21,7 @@ import java.util.UUID
 object AutoTransfer {
     private const val PERIODIC = 9131
     private const val CHANGE = 9132
+    private const val MANUAL = 9133
     fun prefs(c: Context) = c.getSharedPreferences("chatgpt_auto", Context.MODE_PRIVATE)
     fun enable(c: Context, node: String) {
         val p = prefs(c)
@@ -41,9 +42,15 @@ object AutoTransfer {
                     JobInfo.TriggerContentUri.FLAG_NOTIFY_FOR_DESCENDANTS))
                 .setTriggerContentUpdateDelay(2000).setTriggerContentMaxDelay(10000).build())
     }
+    fun scanNow(c: Context) {
+        if (!prefs(c).getBoolean("enabled", false)) return
+        val job = JobInfo.Builder(MANUAL, ComponentName(c, AutoTransferJob::class.java))
+            .setOverrideDeadline(0L).build()
+        c.getSystemService(JobScheduler::class.java).schedule(job)
+    }
     fun disable(c: Context) {
         prefs(c).edit().putBoolean("enabled", false).apply()
-        c.getSystemService(JobScheduler::class.java).apply { cancel(PERIODIC); cancel(CHANGE) }
+        c.getSystemService(JobScheduler::class.java).apply { cancel(PERIODIC); cancel(CHANGE); cancel(MANUAL) }
     }
     fun status(c: Context, value: String) { prefs(c).edit().putString("diagnostic", value).apply() }
     fun isChange(p: JobParameters) = p.jobId == CHANGE
