@@ -158,6 +158,7 @@ fun MainScreen(
     }
 
     val autoEnabled = remember { mutableStateOf(AutoTransfer.prefs(context).getBoolean("enabled", false)) }
+    val diagnostic = remember { mutableStateOf(AutoTransfer.prefs(context).getString("diagnostic", "Nie skanowano") ?: "Nie skanowano") }
     val autoPermission = if (Build.VERSION.SDK_INT >= 33) android.Manifest.permission.READ_MEDIA_IMAGES else android.Manifest.permission.READ_EXTERNAL_STORAGE
     val autoPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted && selectedNodeId != null) {
@@ -206,6 +207,24 @@ fun MainScreen(
                         }
                     }
                 ) { Text(if (autoEnabled.value) "Wyłącz auto ChatGPT" else "Włącz auto ChatGPT") }
+                Button(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    enabled = autoEnabled.value,
+                    onClick = {
+                        AutoTransfer.scanNow(context)
+                        diagnostic.value = "Zlecono skanowanie"
+                    }
+                ) { Text("Testuj wykrywanie zdjęć") }
+                Button(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    onClick = {
+                        diagnostic.value = AutoTransfer.prefs(context).getString("diagnostic", "Brak wyniku") ?: "Brak wyniku"
+                    }
+                ) { Text("Pokaż wynik diagnostyki") }
+                Text(
+                    text = diagnostic.value,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
                 NodeSelectionPager(
                     modifier = Modifier
                         .padding(bottom = 8.dp),
