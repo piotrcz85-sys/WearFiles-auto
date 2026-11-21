@@ -45,6 +45,7 @@ object AutoTransfer {
         prefs(c).edit().putBoolean("enabled", false).apply()
         c.getSystemService(JobScheduler::class.java).apply { cancel(PERIODIC); cancel(CHANGE) }
     }
+    fun status(c: Context, value: String) { prefs(c).edit().putString("diagnostic", value).apply() }
     fun isChange(p: JobParameters) = p.jobId == CHANGE
 }
 
@@ -60,7 +61,10 @@ class AutoTransferJob : JobService() {
                     try { scan() } finally { lock.unlock() }
                 }
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { android.util.Log.w("WearFilesAuto", "Scan failed", e) }
+            catch (e: Exception) {
+                AutoTransfer.status(this@AutoTransferJob, "Błąd skanowania: ${e.javaClass.simpleName}: ${e.message}")
+                android.util.Log.w("WearFilesAuto", "Scan failed", e)
+            }
             finally {
                 if (isActive) {
                     tasks.remove(params.jobId)
@@ -80,33 +84,50 @@ class AutoTransferJob : JobService() {
     private suspend fun scan() {
         val p = AutoTransfer.prefs(this)
         if (!p.getBoolean("enabled", false)) return
+        AutoTransfer.status(this, "Skanowanie folderu Pictures...")
         val node = p.getString("node", null) ?: return
         val reachable = Wearable.getCapabilityClient(this)
             .getCapability("wear_files_app", CapabilityClient.FILTER_REACHABLE).await().nodes
-        if (reachable.none { it.id == node }) return
+        if (reachable.none { it.id == node }) {
+            AutoTransfer.status(this, "Zegarek nieosiągalny przez Wear OS Data Layer")
+            return
+        }
         val media = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         val columns = arrayOf("_id", "_display_name", "relative_path", "owner_package_name",
             "mime_type", "date_added", "_size", "is_pending")
         val files = mutableListOf<Triple<Uri, String, Long>>()
+        var candidates = 0
+        var rejected = 0
         contentResolver.query(media, columns, "date_added >= ?",
             arrayOf((p.getLong("since", Long.MAX_VALUE) / 1000).toString()), "date_added ASC")?.use { c ->
             while (c.moveToNext()) {
                 val name = c.getString(1) ?: continue
-                if (c.getString(2) != "Pictures/" || c.getString(3) != "com.openai.chatgpt") continue
+                if (c.getString(2)?.trimEnd('/') != "Pictures") continue
                 if (!Regex("file_[0-9a-fA-F]+[.](png|jpe?g)", RegexOption.IGNORE_CASE).matches(name)) continue
+                candidates++
+                // The owner column may be unavailable on Android 16.
+                // If missing, fall back to the narrow path and filename filter.
+                val owner = c.getString(3)
+                if (owner != null && owner != "com.openai.chatgpt") { rejected++; continue }
                 if (c.getString(4) !in listOf("image/png", "image/jpeg")) continue
                 if (c.getInt(7) != 0 || c.getLong(6) <= 0) continue
                 if (p.getBoolean("sent:"+name, false)) continue
                 files.add(Triple(ContentUris.withAppendedId(media, c.getLong(0)), name, c.getLong(6)))
             }
         }
+        AutoTransfer.status(this, "Dopasowane: ${files.size}, nazwy: $candidates, inne źródło: $rejected")
         for ((uri, name, size) in files.take(10)) {
             if (!p.getBoolean("enabled", false) || p.getString("node", null) != node) break
             if (p.getBoolean("sent:"+name, false)) continue
+            AutoTransfer.status(this, "Wysyłanie: $name")
             if (send(node, uri, name, size)) {
                 p.edit().putBoolean("sent:"+name, true).commit()
+                AutoTransfer.status(this, "Potwierdzono: $name")
                 NotificationHelper(this).showTransferNotification(name, com.dertefter.wearfiles.data.TransferStatus.SUCCESS)
-            } else break
+            } else {
+                AutoTransfer.status(this, "Nieudana wysyłka: $name")
+                break
+            }
         }
     }
 
